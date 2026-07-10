@@ -46,19 +46,18 @@ notepad .\acme-config.json
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Invoke-AcmeCert.ps1 -ConfigPath .\acme-config.json -ForceRenew
 ```
+![初始化先申请一次证书](初始化先申请一次证书.png)
+
 成功后浏览器访问 `https://你的域名` 验证证书生效。
 
 > 建议先把 `UseStaging` 设 `true` 跑通全流程，再改回 `false` 正式签发，避免踩 LE 正式环境速率限制。
 
 ### 4. 挂自动续期
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Register-AcmeRenewTask.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File "绝对路径\Register-AcmeRenewTask.ps1" -ScriptPath "绝对路径\Invoke-AcmeCert.ps1" -ConfigPath "绝对路径\acme-config.json"
 ```
-每天检查一次，到续期窗口（默认剩约 30 天）自动续期并重绑 IIS；未到则空跑。立即测试：
-```powershell
-Start-ScheduledTask -TaskName 'AcmeCert-AutoRenew'
-Get-Content .\acme-work\acme-cert.log -Tail 30
-```
+![配置定时任务](配置定时任务.png)
+每天检查一次，到续期窗口（默认剩约 30 天）自动续期并重绑 IIS；未到则空跑。
 
 ## 工作流程
 ```
