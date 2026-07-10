@@ -1,0 +1,33 @@
+# ---- 密钥 / 敏感配置（切勿提交）----
+acme-config.json
+config.json
+*.secret
+*.key
+*.pfx
+*.p12
+
+# ---- 运行产物 ----
+acme-work/
+work/
+*.log
+cert-state.json
+
+# ---- Posh-ACME 数据目录（含账户私钥、订单）----
+pa/
+**/pa/
+
+# ---- Windows ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+
+# ---- 编辑器 / IDE ----
+.vs/
+.vscode/
+*.suo
+*.user
+
+# ---- PowerShell ----
+*.ps1xml.bak

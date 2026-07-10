@@ -1,0 +1,15 @@
+{
+  "TencentKeyId": "腾讯云 API 密钥 SecretId（在 console.dnspod.com/account/token/apikey 生成）",
+  "TencentSecret": "腾讯云 API 密钥 SecretKey",
+  "Domains": ["www.example.com"],
+  "ContactEmail": "you@example.com",
+  "UseStaging": false,
+
+  "IISSiteName": "Default Web Site",
+  "BindingHost": "www.example.com",
+  "BindingPort": 443,
+  "PfxPassword": "poshacme",
+  "RenewBeforeDays": 30,
+
+  "WorkDir": "C:\\certs\\acme"
+}
