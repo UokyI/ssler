@@ -1,0 +1,33 @@
+name: Build & Release
+
+# 推送 v 开头的 tag（如 v1.0.0）时触发
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 组装发布包
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory release -Force | Out-Null
+          Copy-Item Invoke-AcmeCert.ps1 release\
+          Copy-Item Register-AcmeRenewTask.ps1 release\
+          Copy-Item acme-config.example.json release\
+          Copy-Item README.md release\
+          Compress-Archive -Path release\* -DestinationPath "sslper_${{ github.ref_name }}.zip" -Force
+
+      - name: 创建 Release 并上传产物
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sslper_${{ github.ref_name }}.zip
+          generate_release_notes: true
