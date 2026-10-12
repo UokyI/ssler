@@ -152,10 +152,10 @@ function Main {
         $daysLeft = if ($existing) { ($existing.NotAfter - (Get-Date)).TotalDays } else { -1 }
         if ($ForceRenew) {
             Write-Log "强制续期（-ForceRenew）..."
-            Submit-Renewal -MainDomain $mainDomain -Force | Out-Null
+            Submit-Renewal -MainDomain $mainDomain -Force -PluginArgs $pArgs | Out-Null
         } elseif ($daysLeft -le $renewBeforeDays) {
             Write-Log ("证书剩余 {0:N1} 天 ≤ 阈值 {1} 天，开始续期 ..." -f $daysLeft, $renewBeforeDays)
-            Submit-Renewal -MainDomain $mainDomain -Force | Out-Null
+            Submit-Renewal -MainDomain $mainDomain -Force -PluginArgs $pArgs | Out-Null
         } else {
             Write-Log ("证书剩余 {0:N1} 天 > 阈值 {1} 天，无需续期。" -f $daysLeft, $renewBeforeDays)
         }
