@@ -18,6 +18,9 @@
 | `Invoke-AcmeCert.ps1` | 主脚本：安装 Posh-ACME、申请/续期、部署到 IIS（幂等，可反复运行） |
 | `acme-config.example.json` | 配置模板 |
 | `Register-AcmeRenewTask.ps1` | 注册每日续期计划任务（SYSTEM 身份） |
+| `Start-AcmeWeb.ps1` | 证书续期 Web 控制台后端（内置 HttpListener，无第三方依赖） |
+| `index.html` | Web 控制台前端页面 |
+| `run.bat` / `run.sh` | 一键启动 Web 控制台（`run.bat` 双击即用，自动申请管理员权限） |
 
 ## 使用步骤
 
@@ -58,6 +61,42 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "绝对路径\Register-AcmeR
 ```
 ![配置定时任务](配置定时任务.png)
 每天检查一次，到续期窗口（默认剩约 30 天）自动续期并重绑 IIS；未到则空跑。
+
+### 5. Web 控制台（可选）
+不想敲命令时，用网页查看/操作。后端 `Start-AcmeWeb.ps1` 只用 Windows 内置的 PowerShell + .NET `HttpListener`，**不需要装任何依赖，也不用改 IIS**。
+
+```powershell
+# 方式一：双击 run.bat（自动提权并启动，最省事）
+# 方式二：管理员 PowerShell 直接启动，浏览器打开 http://localhost:30001/
+powershell -ExecutionPolicy Bypass -File .\Start-AcmeWeb.ps1
+```
+
+> `run.bat` 会先检查管理员权限，不足时自动弹 UAC 提权；`run.sh` 供 Git Bash / WSL 使用（内部调用 PowerShell）。
+
+页面提供：
+- **证书状态**：域名、到期时间、剩余天数（<30 天变黄、<15 天变红）、是否已绑定 IIS、证书指纹。
+- **自动续期开关**：显示计划任务当前是「已开启 / 未开启」，拨动开关即可注册/启用或禁用每日续期任务。
+- **手动续期**：一键执行 `Invoke-AcmeCert.ps1 -ForceRenew`（立即申请/续期并重绑 IIS）。
+- **最近日志**：显示 `acme-work\acme-cert.log` 尾部。
+
+参数：
+
+| 参数 | 说明 |
+|---|---|
+| `-Port` | 监听端口，默认 `30001` |
+| `-BindAddress` | 默认 `localhost`（仅本机）。要局域网访问用 `+` |
+| `-StatusCacheSeconds` | 状态缓存秒数，默认 `5`（低配机器可调大以减少查询） |
+| `-Install` | 注册开机自启计划任务（SYSTEM），实现「常驻服务」 |
+| `-Uninstall` | 停止并删除开机自启任务 |
+| `-NoBrowser` | 启动后**不**自动打开浏览器（默认会自动打开；小内存服务器建议加此项） |
+
+```powershell
+# 开机自启 + 局域网可访问（需管理员先放行 URL ACL）
+netsh http add urlacl url=http://+:30001/ user=Everyone
+powershell -ExecutionPolicy Bypass -File .\Start-AcmeWeb.ps1 -Install -BindAddress + -Port 30001
+```
+
+> 安全提示：该页面能触发续期、改计划任务，属于高权限操作。默认只监听 `localhost`；若要暴露到局域网/公网，请自行加反向代理鉴权或防火墙限制来源。
 
 ## 工作流程
 ```

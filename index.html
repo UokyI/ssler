@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>证书自动续期控制台</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --brand: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; color: #374151; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 20px; }
+  .label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  .value { font-size: 15px; word-break: break-all; }
+  .value.mono { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+  .value.ok { color: var(--ok); font-weight: 600; }
+  .value.warn { color: var(--warn); font-weight: 600; }
+  .value.danger { color: var(--danger); font-weight: 600; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .auto-text { font-weight: 600; }
+  .meta { margin-top: 12px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+  .meta span { color: var(--text); }
+
+  .switch { position: relative; display: inline-block; width: 52px; height: 28px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; cursor: pointer; border-radius: 999px;
+    background: #cbd5e1; transition: .2s;
+  }
+  .slider::before {
+    content: ""; position: absolute; height: 22px; width: 22px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+  .switch input:checked + .slider { background: var(--ok); }
+  .switch input:checked + .slider::before { transform: translateX(24px); }
+  .switch input:disabled + .slider { opacity: .6; cursor: wait; }
+
+  .btn {
+    border: none; border-radius: 8px; padding: 10px 22px;
+    background: var(--brand); color: #fff; font-size: 15px; cursor: pointer;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .btn:disabled { background: #93c5fd; cursor: wait; }
+  .msg { margin-left: 12px; font-size: 14px; }
+  .msg.ok { color: var(--ok); }
+  .msg.danger { color: var(--danger); }
+  .log {
+    margin: 0; padding: 12px; background: #0f172a; color: #cbd5e1;
+    border-radius: 8px; font: 12px/1.5 Consolas, "Courier New", monospace;
+    max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>证书自动续期控制台</h1>
+  <p class="sub" id="serverInfo">正在加载…</p>
+
+  <section class="card">
+    <h2>证书状态</h2>
+    <div class="grid">
+      <div><span class="label">域名</span><div class="value" id="domains">-</div></div>
+      <div><span class="label">到期时间</span><div class="value" id="notAfter">-</div></div>
+      <div><span class="label">剩余天数</span><div class="value" id="daysLeft">-</div></div>
+      <div><span class="label">证书环境</span><div class="value" id="env">-</div></div>
+      <div><span class="label">IIS 绑定</span><div class="value" id="bound">-</div></div>
+      <div><span class="label">证书指纹</span><div class="value mono" id="thumb">-</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>自动续期</h2>
+    <div class="row">
+      <label class="switch">
+        <input type="checkbox" id="autoToggle">
+        <span class="slider"></span>
+      </label>
+      <span class="auto-text" id="autoText">未开启</span>
+    </div>
+    <div class="meta">
+      <div>任务名：<span id="taskName">-</span></div>
+      <div>下次运行：<span id="nextRun">-</span></div>
+      <div>上次运行：<span id="lastRun">-</span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>手动续期</h2>
+    <div class="row">
+      <button id="renewBtn" class="btn">立即续期</button>
+      <span class="msg" id="renewMsg"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>最近日志</h2>
+    <pre class="log" id="logTail">-</pre>
+  </section>
+</div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var busy = false;
+
+  function api(path, opts) {
+    return fetch(path, opts).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  function daysClass(d) {
+    if (d === null || d === undefined) return '';
+    if (d < 15) return 'danger';
+    if (d < 30) return 'warn';
+    return 'ok';
+  }
+
+  function render(s) {
+    $('serverInfo').textContent = '服务器时间：' + (s.serverTime || '-') +
+      '　|　配置：' + (s.configExists ? '已加载' : '未找到 acme-config.json');
+    $('domains').textContent = (s.domains && s.domains.length) ? s.domains.join('、') : '-';
+    $('notAfter').textContent = s.notAfter || '未检测到已绑定证书';
+    var dl = $('daysLeft');
+    dl.textContent = (s.daysLeft === null || s.daysLeft === undefined) ? '-' : s.daysLeft + ' 天';
+    dl.className = 'value ' + daysClass(s.daysLeft);
+    $('env').textContent = s.useStaging ? '测试环境 (Staging)' : '生产环境';
+    $('bound').textContent = s.bound ? '已绑定 IIS' : '未绑定';
+    $('thumb').textContent = s.thumbprint || '-';
+
+    var ar = s.autoRenew || {};
+    $('autoToggle').checked = !!ar.enabled;
+    $('autoText').textContent = ar.enabled ? '已开启' : '未开启';
+    $('taskName').textContent = ar.taskName || '-';
+    $('nextRun').textContent = ar.nextRun || '-';
+    $('lastRun').textContent = (ar.lastRun || '-') +
+      (ar.lastResult === null || ar.lastResult === undefined ? '' : '（结果码 ' + ar.lastResult + '）');
+    $('logTail').textContent = (s.logTail && s.logTail.length) ? s.logTail.join('\n') : '（暂无日志）';
+  }
+
+  function refresh() {
+    return api('/api/status', { cache: 'no-store' }).then(render).catch(function (e) {
+      var hint;
+      if (location.protocol === 'file:') {
+        hint = '你正在直接打开本地文件（file://），无法访问后端。请改用后端地址访问，例如 http://localhost:30001/ 。';
+      } else {
+        hint = '请确认控制台正在运行，且本页是通过它提示的地址打开的（当前来源 ' + location.origin +
+               '）；若从其它机器访问，请用 -BindAddress + 启动。';
+      }
+      $('serverInfo').textContent = '无法获取状态：' + e.message + ' — ' + hint;
+    });
+  }
+
+  $('autoToggle').addEventListener('change', function (e) {
+    var enabled = e.target.checked;
+    e.target.disabled = true;
+    $('autoText').textContent = enabled ? '开启中…' : '关闭中…';
+    api('/api/autorenew', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: enabled })
+    }).then(render).catch(function (err) {
+      alert('操作失败：' + err.message);
+      refresh();
+    }).then(function () { e.target.disabled = false; });
+  });
+
+  function finishRenew(msg, cls) {
+    busy = false;
+    var btn = $('renewBtn');
+    btn.disabled = false; btn.textContent = '立即续期';
+    if (msg) { $('renewMsg').textContent = msg; $('renewMsg').className = 'msg ' + (cls || ''); }
+  }
+
+  function pollRenew() {
+    api('/api/renew/status').then(function (r) {
+      if (r.running) {
+        $('renewMsg').textContent = '正在申请/续期证书，请稍候…';
+        setTimeout(pollRenew, 3000);
+        return;
+      }
+      if (r.finished) {
+        if (r.status) render(r.status); else refresh();
+        if (r.success) finishRenew('续期成功。', 'ok');
+        else finishRenew('续期失败（退出码 ' + r.exitCode + '），请查看日志。', 'danger');
+        return;
+      }
+      finishRenew('未能启动续期。', 'danger');
+    }).catch(function (err) {
+      finishRenew('续期状态查询失败：' + err.message, 'danger');
+    });
+  }
+
+  $('renewBtn').addEventListener('click', function () {
+    if (busy) return;
+    busy = true;
+    var btn = $('renewBtn');
+    btn.disabled = true; btn.textContent = '续期中…';
+    $('renewMsg').textContent = '已开始续期，请稍候…';
+    $('renewMsg').className = 'msg';
+    api('/api/renew', { method: 'POST' }).then(function () {
+      pollRenew();
+    }).catch(function (err) {
+      finishRenew('续期请求失败：' + err.message, 'danger');
+    });
+  });
+
+  refresh();
+  setInterval(function () { if (!busy) refresh(); }, 15000);
+</script>
+</body>
+</html>
